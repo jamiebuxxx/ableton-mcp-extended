@@ -577,16 +577,24 @@ class AbletonMCP(ControlSurface):
             raise
     
     def _get_track_info(self, track_index):
-        """Get information about a track"""
+        """Get information about a track.
+
+        track_index is 0-based; return tracks come after session tracks
+        (same resolution as get_track_volume).
+        """
         try:
-            if track_index < 0 or track_index >= len(self._song.tracks):
-                raise IndexError("Track index out of range")
+            session_count = len(self._song.tracks)
+            all_tracks = list(self._song.tracks) + list(self._song.return_tracks)
+            if track_index < 0 or track_index >= len(all_tracks):
+                raise IndexError("Track index {0} out of range (0-{1})".format(
+                    track_index, len(all_tracks) - 1))
+
+            track = all_tracks[track_index]
+            is_return = track_index >= session_count
             
-            track = self._song.tracks[track_index]
-            
-            # Get clip slots
+            # Get clip slots (return tracks have none)
             clip_slots = []
-            for slot_index, slot in enumerate(track.clip_slots):
+            for slot_index, slot in enumerate([] if is_return else track.clip_slots):
                 clip_info = None
                 if slot.has_clip:
                     clip = slot.clip
@@ -613,10 +621,31 @@ class AbletonMCP(ControlSurface):
                     "type": self._get_device_type(device)
                 })
             
+            if is_return:
+                # Return tracks have no input type, arm state or clip slots
+                result = {
+                    "index": track_index,
+                    "track_number": track_index + 1,
+                    "name": track.name,
+                    "is_return_track": True,
+                    "is_audio_track": False,
+                    "is_midi_track": False,
+                    "is_group_track": False,
+                    "mute": track.mute,
+                    "solo": track.solo,
+                    "arm": None,
+                    "volume": track.mixer_device.volume.value,
+                    "panning": track.mixer_device.panning.value,
+                    "clip_slots": clip_slots,
+                    "devices": devices
+                }
+                return result
+
             is_group = bool(getattr(track, "is_foldable", False))
 
             result = {
                 "index": track_index,
+                "track_number": track_index + 1,
                 "name": track.name,
                 "is_audio_track": track.has_audio_input,
                 "is_midi_track": track.has_midi_input,

@@ -69,11 +69,32 @@ class _GroupTrack:
             "Master, Group and Return Tracks have no arrangement clips")
 
 
-def _make_script(tracks=()):
+class _ReturnTrack:
+    is_foldable = False
+
+    def __init__(self, name="A-Reverb", devices=()):
+        self.name = name
+        self.mute = False
+        self.solo = False
+        self.devices = list(devices)
+        self.mixer_device = MagicMock()
+        self.mixer_device.volume.value = 0.85
+        self.mixer_device.panning.value = 0.0
+
+    @property
+    def arm(self):
+        raise RuntimeError("Master and Return Tracks have no 'Arm' state!")
+
+    @property
+    def clip_slots(self):
+        raise RuntimeError("return track clip_slots must not be read")
+
+
+def _make_script(tracks=(), return_tracks=()):
     script = AbletonMCP.__new__(AbletonMCP)
     script._song = MagicMock()
     script._song.tracks = list(tracks)
-    script._song.return_tracks = []
+    script._song.return_tracks = list(return_tracks)
     script._song.master_track = MagicMock()
     return script
 
@@ -95,6 +116,50 @@ class TestGetTrackInfoOnGroupTrack:
 
         assert result["arm"] is True
         assert result["is_group_track"] is False
+
+
+class TestGetTrackInfoOnReturnTrack:
+    def test_return_track_resolved_after_session_tracks(self):
+        device = MagicMock()
+        device.name = "Reverb"
+        device.class_name = "Reverb"
+        script = _make_script(
+            [_NormalTrack("Synth")],
+            [_ReturnTrack("A-Reverb", devices=[device]), _ReturnTrack("B-Delay")],
+        )
+        script._get_device_type = MagicMock(return_value="audio_effect")
+
+        result = script._get_track_info(1)
+
+        assert result["name"] == "A-Reverb"
+        assert result["index"] == 1
+        assert result["track_number"] == 2
+        assert result["is_return_track"] is True
+        assert result["clip_slots"] == []
+        assert result["arm"] is None
+        assert [d["name"] for d in result["devices"]] == ["Reverb"]
+        assert script._get_track_info(2)["name"] == "B-Delay"
+
+    def test_session_track_keeps_fields_and_adds_track_number(self):
+        script = _make_script([_NormalTrack("Synth")], [_ReturnTrack()])
+
+        result = script._get_track_info(0)
+
+        assert result["index"] == 0
+        assert result["track_number"] == 1
+        assert "is_return_track" not in result
+        assert result["is_midi_track"] is True
+
+    def test_index_past_return_tracks_raises(self):
+        script = _make_script([_NormalTrack("Synth")], [_ReturnTrack()])
+        script.log_message = MagicMock()
+
+        try:
+            script._get_track_info(2)
+        except IndexError:
+            pass
+        else:
+            raise AssertionError("expected IndexError")
 
 
 class TestGetArrangementInfoSkipsGroupTracks:

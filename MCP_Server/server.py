@@ -411,8 +411,12 @@ def get_track_info(ctx: Context, track_index: int) -> str:
     """
     Get detailed information about a specific track in Ableton.
 
+    Return tracks come after session tracks and report "is_return_track": true
+    with no clip slots. "track_number" is the 1-based number to pass back to
+    other tools; "index" is the Remote Script's 0-based index.
+
     Parameters:
-    - track_index: Track number (1-based).
+    - track_index: Track number (1-based). Return tracks come after session tracks.
     """
     try:
         ableton = get_ableton_connection()
