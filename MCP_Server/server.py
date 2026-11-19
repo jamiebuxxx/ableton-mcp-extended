@@ -239,6 +239,20 @@ def _optional_to_zero_based(index: int, field_name: str = "index") -> int | None
     return index - 1
 
 
+def _import_plugin_aliases():
+    """Return the plugin_aliases module under either launch style.
+
+    Launched as a script (``python MCP_Server/server.py``) only the
+    ``MCP_Server`` folder is on sys.path, so the package-qualified import
+    fails; fall back to the sibling-module import in that case.
+    """
+    try:
+        from MCP_Server import plugin_aliases
+    except ImportError:
+        import plugin_aliases
+    return plugin_aliases
+
+
 # Parameter normalization utilities
 
 
@@ -397,8 +411,12 @@ def get_track_info(ctx: Context, track_index: int) -> str:
     """
     Get detailed information about a specific track in Ableton.
 
+    Return tracks come after session tracks and report "is_return_track": true
+    with no clip slots. "track_number" is the 1-based number to pass back to
+    other tools; "index" is the Remote Script's 0-based index.
+
     Parameters:
-    - track_index: Track number (1-based).
+    - track_index: Track number (1-based). Return tracks come after session tracks.
     """
     try:
         ableton = get_ableton_connection()
@@ -465,18 +483,13 @@ def get_track_volume(ctx: Context, track_index: int) -> str:
         name = result.get("track_name", "?")
         vol_min = result.get("volume_min", 0)
         vol_max = result.get("volume_max", 1)
-        # Approximate dB: unity is at 0.85 normalized
-        unity = 0.85
-        if vol > 0:
-            import math
-            db_approx = 20 * math.log10(vol / unity) if vol > 0 else -float('inf')
-            db_str = f"{db_approx:+.1f} dB" if vol > 0 else "-inf dB"
-        else:
-            db_str = "-inf dB"
+        # Live's own fader readout (e.g. "-3.2 dB"); never approximated here
+        display = result.get("volume_display")
+        display_str = f" (Live shows {display})" if display else ""
         pan_str = "center" if abs(pan) < 0.01 else (f"{abs(pan):.2f} {'L' if pan < 0 else 'R'}")
         return (
             f"Track '{name}':\n"
-            f"  Volume: {vol:.4f} (range {vol_min:.2f}–{vol_max:.2f}) ≈ {db_str}\n"
+            f"  Volume: {vol:.4f} (range {vol_min:.2f}–{vol_max:.2f}){display_str}\n"
             f"  Panning: {pan:.4f} ({pan_str})\n"
             f"  Unity gain (0 dB) = 0.85"
         )
@@ -509,10 +522,10 @@ def set_track_volume(ctx: Context, track_index: int, volume: float) -> str:
         })
         name = result.get("track_name", "?")
         vol = result.get("volume", volume)
-        import math
-        unity = 0.85
-        db_str = f"{20 * math.log10(vol / unity):+.1f} dB" if vol > 0 else "-inf dB"
-        return f"Set '{name}' fader to {vol:.4f} (≈ {db_str})"
+        # Live's own fader readout (e.g. "-3.2 dB"); never approximated here
+        display = result.get("volume_display")
+        display_str = f" (Live shows {display})" if display else ""
+        return f"Set '{name}' fader to {vol:.4f}{display_str}"
     except Exception as e:
         logger.error(f"Error setting track volume: {str(e)}")
         return f"Error setting track volume: {str(e)}"
@@ -660,7 +673,9 @@ def load_instrument_or_effect(ctx: Context, track_index: int, uri: str) -> str:
                 return f"Loaded instrument with URI '{uri}' on track {track_index}. New devices: {', '.join(new_devices)}"
             else:
                 devices = result.get("devices_after", [])
-                return f"Loaded instrument with URI '{uri}' on track {track_index}. Devices on track: {', '.join(devices)}"
+                if devices:
+                    return f"Loaded instrument with URI '{uri}' on track {track_index}. Devices on track: {', '.join(devices)}"
+                return f"Loaded instrument with URI '{uri}' on track {track_index}."
         else:
             return f"Failed to load instrument with URI '{uri}'"
     except Exception as e:
@@ -1694,7 +1709,9 @@ def get_device_parameters(
     Specify category or show_all=True for full parameter details.
     """
     try:
-        from MCP_Server.plugin_aliases import get_categories, get_alias_for_param
+        _aliases = _import_plugin_aliases()
+        get_categories = _aliases.get_categories
+        get_alias_for_param = _aliases.get_alias_for_param
 
         ableton = get_ableton_connection()
         ti = _to_zero_based(track_index, "track_index")
@@ -1784,7 +1801,7 @@ def set_device_parameter(
     - value: Normalized value 0.0-1.0.
     """
     try:
-        from MCP_Server.plugin_aliases import resolve_alias
+        resolve_alias = _import_plugin_aliases().resolve_alias
 
         ableton = get_ableton_connection()
         ti = _to_zero_based(track_index, "track_index")

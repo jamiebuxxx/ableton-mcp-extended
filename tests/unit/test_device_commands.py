@@ -22,6 +22,7 @@ from MCP_Server.server import (
     get_drum_pad_info,
     delete_device,
     navigate_device_preset,
+    load_instrument_or_effect,
 )
 
 
@@ -348,3 +349,43 @@ class TestNavigateDevicePreset:
 
         result = navigate_device_preset(MagicMock(), track_index=1, direction="next")
         assert "Error" in result
+
+
+class TestLoadInstrumentOrEffectMessage:
+    """The load message lists the real device names from the Remote Script."""
+
+    @patch('MCP_Server.server.get_ableton_connection')
+    def test_lists_new_devices(self, mock_conn):
+        mock_ableton = MagicMock()
+        mock_ableton.send_command.return_value = {
+            "loaded": True, "new_devices": ["Wavetable"],
+            "devices_after": ["EQ Eight", "Wavetable"],
+        }
+        mock_conn.return_value = mock_ableton
+
+        result = load_instrument_or_effect(MagicMock(), track_index=2, uri="query:Synths#Wavetable")
+
+        assert result.endswith("on track 2. New devices: Wavetable")
+
+    @patch('MCP_Server.server.get_ableton_connection')
+    def test_lists_devices_on_track_when_none_are_new(self, mock_conn):
+        mock_ableton = MagicMock()
+        mock_ableton.send_command.return_value = {
+            "loaded": True, "new_devices": [],
+            "devices_after": ["Drum Rack", "EQ Eight"],
+        }
+        mock_conn.return_value = mock_ableton
+
+        result = load_instrument_or_effect(MagicMock(), track_index=1, uri="u")
+
+        assert result.endswith("on track 1. Devices on track: Drum Rack, EQ Eight")
+
+    @patch('MCP_Server.server.get_ableton_connection')
+    def test_drops_device_clause_when_no_names_available(self, mock_conn):
+        mock_ableton = MagicMock()
+        mock_ableton.send_command.return_value = {"loaded": True}
+        mock_conn.return_value = mock_ableton
+
+        result = load_instrument_or_effect(MagicMock(), track_index=1, uri="u")
+
+        assert result == "Loaded instrument with URI 'u' on track 1."

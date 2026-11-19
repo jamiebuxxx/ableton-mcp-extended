@@ -13,7 +13,12 @@ sys.modules['mcp.server.fastmcp'] = _mock_fastmcp
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
-from MCP_Server.server import delete_track, get_track_deletion_status
+from MCP_Server.server import (
+    delete_track,
+    get_track_deletion_status,
+    get_track_volume,
+    set_track_volume,
+)
 
 
 class TestDeleteTrackSafetyGuard:
@@ -106,3 +111,58 @@ class TestTrackDeletionStatus:
 
         assert "Track deletion available" in result
         assert "up to 3 more track(s)" in result
+
+
+class TestTrackVolumeDisplay:
+    """Fader readout comes from Live's own display string, never a formula."""
+
+    @patch('MCP_Server.server.get_ableton_connection')
+    def test_set_volume_prints_live_display_string(self, mock_conn):
+        mock_ableton = MagicMock()
+        mock_ableton.send_command.return_value = {
+            "track_name": "Bass", "volume": 0.7, "volume_display": "-3.2 dB",
+        }
+        mock_conn.return_value = mock_ableton
+
+        result = set_track_volume(MagicMock(), track_index=1, volume=0.7)
+
+        assert result == "Set 'Bass' fader to 0.7000 (Live shows -3.2 dB)"
+
+    @patch('MCP_Server.server.get_ableton_connection')
+    def test_set_volume_without_display_prints_only_normalized_value(self, mock_conn):
+        mock_ableton = MagicMock()
+        mock_ableton.send_command.return_value = {"track_name": "Bass", "volume": 0.7}
+        mock_conn.return_value = mock_ableton
+
+        result = set_track_volume(MagicMock(), track_index=1, volume=0.7)
+
+        assert result == "Set 'Bass' fader to 0.7000"
+        assert "dB" not in result
+
+    @patch('MCP_Server.server.get_ableton_connection')
+    def test_get_volume_prints_live_display_string(self, mock_conn):
+        mock_ableton = MagicMock()
+        mock_ableton.send_command.return_value = {
+            "track_name": "Bass", "volume": 0.7, "volume_min": 0.0,
+            "volume_max": 1.0, "volume_display": "-3.2 dB", "panning": 0.0,
+        }
+        mock_conn.return_value = mock_ableton
+
+        result = get_track_volume(MagicMock(), track_index=1)
+
+        assert "Volume: 0.7000 (range 0.00–1.00) (Live shows -3.2 dB)" in result
+        assert "≈" not in result
+
+    @patch('MCP_Server.server.get_ableton_connection')
+    def test_get_volume_without_display_omits_db_claim(self, mock_conn):
+        mock_ableton = MagicMock()
+        mock_ableton.send_command.return_value = {
+            "track_name": "Bass", "volume": 0.7, "volume_min": 0.0,
+            "volume_max": 1.0, "panning": 0.0,
+        }
+        mock_conn.return_value = mock_ableton
+
+        result = get_track_volume(MagicMock(), track_index=1)
+
+        assert "Volume: 0.7000 (range 0.00–1.00)\n" in result
+        assert "Live shows" not in result

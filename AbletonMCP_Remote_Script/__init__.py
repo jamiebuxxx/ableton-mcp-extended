@@ -577,16 +577,24 @@ class AbletonMCP(ControlSurface):
             raise
     
     def _get_track_info(self, track_index):
-        """Get information about a track"""
+        """Get information about a track.
+
+        track_index is 0-based; return tracks come after session tracks
+        (same resolution as get_track_volume).
+        """
         try:
-            if track_index < 0 or track_index >= len(self._song.tracks):
-                raise IndexError("Track index out of range")
+            session_count = len(self._song.tracks)
+            all_tracks = list(self._song.tracks) + list(self._song.return_tracks)
+            if track_index < 0 or track_index >= len(all_tracks):
+                raise IndexError("Track index {0} out of range (0-{1})".format(
+                    track_index, len(all_tracks) - 1))
+
+            track = all_tracks[track_index]
+            is_return = track_index >= session_count
             
-            track = self._song.tracks[track_index]
-            
-            # Get clip slots
+            # Get clip slots (return tracks have none)
             clip_slots = []
-            for slot_index, slot in enumerate(track.clip_slots):
+            for slot_index, slot in enumerate([] if is_return else track.clip_slots):
                 clip_info = None
                 if slot.has_clip:
                     clip = slot.clip
@@ -613,10 +621,31 @@ class AbletonMCP(ControlSurface):
                     "type": self._get_device_type(device)
                 })
             
+            if is_return:
+                # Return tracks have no input type, arm state or clip slots
+                result = {
+                    "index": track_index,
+                    "track_number": track_index + 1,
+                    "name": track.name,
+                    "is_return_track": True,
+                    "is_audio_track": False,
+                    "is_midi_track": False,
+                    "is_group_track": False,
+                    "mute": track.mute,
+                    "solo": track.solo,
+                    "arm": None,
+                    "volume": track.mixer_device.volume.value,
+                    "panning": track.mixer_device.panning.value,
+                    "clip_slots": clip_slots,
+                    "devices": devices
+                }
+                return result
+
             is_group = bool(getattr(track, "is_foldable", False))
 
             result = {
                 "index": track_index,
+                "track_number": track_index + 1,
                 "name": track.name,
                 "is_audio_track": track.has_audio_input,
                 "is_midi_track": track.has_midi_input,
@@ -672,6 +701,14 @@ class AbletonMCP(ControlSurface):
             self.log_message("Error setting track name: " + str(e))
             raise
 
+    def _param_display(self, param):
+        """Return Live's own display string for a parameter, or None."""
+        try:
+            return str(param)
+        except Exception as e:
+            self.log_message("Error reading parameter display: " + str(e))
+            return None
+
     def _get_track_volume(self, track_index):
         """Get current volume and panning for a track's mixer fader."""
         try:
@@ -687,6 +724,7 @@ class AbletonMCP(ControlSurface):
                 "volume": vol_param.value,
                 "volume_min": vol_param.min,
                 "volume_max": vol_param.max,
+                "volume_display": self._param_display(vol_param),
                 "panning": pan_param.value,
                 "panning_min": pan_param.min,
                 "panning_max": pan_param.max,
@@ -715,6 +753,7 @@ class AbletonMCP(ControlSurface):
             return {
                 "track_name": track.name,
                 "volume": vol_param.value,
+                "volume_display": self._param_display(vol_param),
             }
         except Exception as e:
             self.log_message("Error setting track volume: " + str(e))
@@ -1104,14 +1143,29 @@ class AbletonMCP(ControlSurface):
             # Select the track
             self._song.view.selected_track = track
             
+            devices_before = [d.name for d in track.devices]
+
             # Load the item
             app.browser.load_item(item)
+
+            devices_after = [d.name for d in track.devices]
+            # Names present after the load that were not there before
+            # (multiset difference, so duplicate device names still count).
+            remaining = list(devices_before)
+            new_devices = []
+            for name in devices_after:
+                if name in remaining:
+                    remaining.remove(name)
+                else:
+                    new_devices.append(name)
             
             result = {
                 "loaded": True,
                 "item_name": item.name,
                 "track_name": track.name,
-                "uri": item_uri
+                "uri": item_uri,
+                "new_devices": new_devices,
+                "devices_after": devices_after
             }
             return result
         except Exception as e:
