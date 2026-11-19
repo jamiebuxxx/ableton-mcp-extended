@@ -673,7 +673,9 @@ def load_instrument_or_effect(ctx: Context, track_index: int, uri: str) -> str:
                 return f"Loaded instrument with URI '{uri}' on track {track_index}. New devices: {', '.join(new_devices)}"
             else:
                 devices = result.get("devices_after", [])
-                return f"Loaded instrument with URI '{uri}' on track {track_index}. Devices on track: {', '.join(devices)}"
+                if devices:
+                    return f"Loaded instrument with URI '{uri}' on track {track_index}. Devices on track: {', '.join(devices)}"
+                return f"Loaded instrument with URI '{uri}' on track {track_index}."
         else:
             return f"Failed to load instrument with URI '{uri}'"
     except Exception as e:

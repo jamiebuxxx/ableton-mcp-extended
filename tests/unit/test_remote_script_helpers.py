@@ -189,6 +189,52 @@ class TestTrackVolumeDisplay:
         assert result["volume_display"] == "-3.2 dB"
 
 
+class TestLoadBrowserItemReportsDevices:
+    def _script_with_track(self, track, appended_names):
+        script = _make_script([track])
+        browser = MagicMock()
+
+        def _load(item):
+            for name in appended_names:
+                dev = MagicMock()
+                dev.name = name
+                track.devices.append(dev)
+
+        browser.load_item.side_effect = _load
+        app = MagicMock()
+        app.browser = browser
+        script.application = MagicMock(return_value=app)
+        item = MagicMock()
+        item.name = "Wavetable"
+        script._find_browser_item_by_uri = MagicMock(return_value=item)
+        return script
+
+    def test_reports_new_and_all_device_names(self):
+        track = _NormalTrack("Synth")
+        eq = MagicMock()
+        eq.name = "EQ Eight"
+        track.devices.append(eq)
+        script = self._script_with_track(track, ["Wavetable"])
+
+        result = script._load_browser_item(0, "query:Synths#Wavetable")
+
+        assert result["loaded"] is True
+        assert result["new_devices"] == ["Wavetable"]
+        assert result["devices_after"] == ["EQ Eight", "Wavetable"]
+
+    def test_duplicate_device_name_still_counts_as_new(self):
+        track = _NormalTrack("Synth")
+        eq = MagicMock()
+        eq.name = "EQ Eight"
+        track.devices.append(eq)
+        script = self._script_with_track(track, ["EQ Eight"])
+
+        result = script._load_browser_item(0, "uri")
+
+        assert result["new_devices"] == ["EQ Eight"]
+        assert result["devices_after"] == ["EQ Eight", "EQ Eight"]
+
+
 class TestGetArrangementInfoSkipsGroupTracks:
     def test_all_tracks_skips_group(self):
         normal = _NormalTrack("Drums")

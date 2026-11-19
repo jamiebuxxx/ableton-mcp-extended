@@ -1143,14 +1143,29 @@ class AbletonMCP(ControlSurface):
             # Select the track
             self._song.view.selected_track = track
             
+            devices_before = [d.name for d in track.devices]
+
             # Load the item
             app.browser.load_item(item)
+
+            devices_after = [d.name for d in track.devices]
+            # Names present after the load that were not there before
+            # (multiset difference, so duplicate device names still count).
+            remaining = list(devices_before)
+            new_devices = []
+            for name in devices_after:
+                if name in remaining:
+                    remaining.remove(name)
+                else:
+                    new_devices.append(name)
             
             result = {
                 "loaded": True,
                 "item_name": item.name,
                 "track_name": track.name,
-                "uri": item_uri
+                "uri": item_uri,
+                "new_devices": new_devices,
+                "devices_after": devices_after
             }
             return result
         except Exception as e:
