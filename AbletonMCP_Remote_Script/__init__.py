@@ -701,6 +701,14 @@ class AbletonMCP(ControlSurface):
             self.log_message("Error setting track name: " + str(e))
             raise
 
+    def _param_display(self, param):
+        """Return Live's own display string for a parameter, or None."""
+        try:
+            return str(param)
+        except Exception as e:
+            self.log_message("Error reading parameter display: " + str(e))
+            return None
+
     def _get_track_volume(self, track_index):
         """Get current volume and panning for a track's mixer fader."""
         try:
@@ -716,6 +724,7 @@ class AbletonMCP(ControlSurface):
                 "volume": vol_param.value,
                 "volume_min": vol_param.min,
                 "volume_max": vol_param.max,
+                "volume_display": self._param_display(vol_param),
                 "panning": pan_param.value,
                 "panning_min": pan_param.min,
                 "panning_max": pan_param.max,
@@ -744,6 +753,7 @@ class AbletonMCP(ControlSurface):
             return {
                 "track_name": track.name,
                 "volume": vol_param.value,
+                "volume_display": self._param_display(vol_param),
             }
         except Exception as e:
             self.log_message("Error setting track volume: " + str(e))

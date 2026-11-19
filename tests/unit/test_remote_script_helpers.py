@@ -162,6 +162,33 @@ class TestGetTrackInfoOnReturnTrack:
             raise AssertionError("expected IndexError")
 
 
+class TestTrackVolumeDisplay:
+    def _volume_track(self):
+        track = _NormalTrack("Bass")
+        vol = MagicMock()
+        vol.value = 0.7
+        vol.min = 0.0
+        vol.max = 1.0
+        vol.__str__ = lambda self: "-3.2 dB"
+        track.mixer_device.volume = vol
+        return track
+
+    def test_get_track_volume_returns_live_display_string(self):
+        script = _make_script([self._volume_track()])
+
+        result = script._get_track_volume(0)
+
+        assert result["volume"] == 0.7
+        assert result["volume_display"] == "-3.2 dB"
+
+    def test_set_track_volume_returns_live_display_string(self):
+        script = _make_script([self._volume_track()])
+
+        result = script._set_track_volume(0, 0.7)
+
+        assert result["volume_display"] == "-3.2 dB"
+
+
 class TestGetArrangementInfoSkipsGroupTracks:
     def test_all_tracks_skips_group(self):
         normal = _NormalTrack("Drums")

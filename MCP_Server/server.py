@@ -483,18 +483,13 @@ def get_track_volume(ctx: Context, track_index: int) -> str:
         name = result.get("track_name", "?")
         vol_min = result.get("volume_min", 0)
         vol_max = result.get("volume_max", 1)
-        # Approximate dB: unity is at 0.85 normalized
-        unity = 0.85
-        if vol > 0:
-            import math
-            db_approx = 20 * math.log10(vol / unity) if vol > 0 else -float('inf')
-            db_str = f"{db_approx:+.1f} dB" if vol > 0 else "-inf dB"
-        else:
-            db_str = "-inf dB"
+        # Live's own fader readout (e.g. "-3.2 dB"); never approximated here
+        display = result.get("volume_display")
+        display_str = f" (Live shows {display})" if display else ""
         pan_str = "center" if abs(pan) < 0.01 else (f"{abs(pan):.2f} {'L' if pan < 0 else 'R'}")
         return (
             f"Track '{name}':\n"
-            f"  Volume: {vol:.4f} (range {vol_min:.2f}–{vol_max:.2f}) ≈ {db_str}\n"
+            f"  Volume: {vol:.4f} (range {vol_min:.2f}–{vol_max:.2f}){display_str}\n"
             f"  Panning: {pan:.4f} ({pan_str})\n"
             f"  Unity gain (0 dB) = 0.85"
         )
@@ -527,10 +522,10 @@ def set_track_volume(ctx: Context, track_index: int, volume: float) -> str:
         })
         name = result.get("track_name", "?")
         vol = result.get("volume", volume)
-        import math
-        unity = 0.85
-        db_str = f"{20 * math.log10(vol / unity):+.1f} dB" if vol > 0 else "-inf dB"
-        return f"Set '{name}' fader to {vol:.4f} (≈ {db_str})"
+        # Live's own fader readout (e.g. "-3.2 dB"); never approximated here
+        display = result.get("volume_display")
+        display_str = f" (Live shows {display})" if display else ""
+        return f"Set '{name}' fader to {vol:.4f}{display_str}"
     except Exception as e:
         logger.error(f"Error setting track volume: {str(e)}")
         return f"Error setting track volume: {str(e)}"
