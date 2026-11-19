@@ -239,6 +239,20 @@ def _optional_to_zero_based(index: int, field_name: str = "index") -> int | None
     return index - 1
 
 
+def _import_plugin_aliases():
+    """Return the plugin_aliases module under either launch style.
+
+    Launched as a script (``python MCP_Server/server.py``) only the
+    ``MCP_Server`` folder is on sys.path, so the package-qualified import
+    fails; fall back to the sibling-module import in that case.
+    """
+    try:
+        from MCP_Server import plugin_aliases
+    except ImportError:
+        import plugin_aliases
+    return plugin_aliases
+
+
 # Parameter normalization utilities
 
 
@@ -1694,7 +1708,9 @@ def get_device_parameters(
     Specify category or show_all=True for full parameter details.
     """
     try:
-        from MCP_Server.plugin_aliases import get_categories, get_alias_for_param
+        _aliases = _import_plugin_aliases()
+        get_categories = _aliases.get_categories
+        get_alias_for_param = _aliases.get_alias_for_param
 
         ableton = get_ableton_connection()
         ti = _to_zero_based(track_index, "track_index")
@@ -1784,7 +1800,7 @@ def set_device_parameter(
     - value: Normalized value 0.0-1.0.
     """
     try:
-        from MCP_Server.plugin_aliases import resolve_alias
+        resolve_alias = _import_plugin_aliases().resolve_alias
 
         ableton = get_ableton_connection()
         ti = _to_zero_based(track_index, "track_index")
